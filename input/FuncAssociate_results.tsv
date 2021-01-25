@@ -1,0 +1,52 @@
+# species: Mus musculus
+# support: EXP, IMP, ISS, ISM, TAS, IEA, IDA, IGI, ISO, IGC, NAS, IPI, IEP, ISA, RCA, IC
+# associations retrieved on: 2017-08-09 16:01:08-04
+# gofunc built on: 2016-02-08 14:16:26.444801-05
+# gene associations file: ftp://ftp.geneontology.org/pub/go/gene-associations/gene_association.mgi.gz
+#   revision: 12/21/2015 $
+#   downloaded on: 2015-12-22 08:03:20-05
+# GO DAG files from: http://archive.geneontology.org/latest-full/go_201512-termdb-tables.tar.gz
+#   downloaded on: 2015-12-22 05:43:21-05
+# translation required: yes
+# translation info:
+#   authority: ensembl
+#     synergizer db built on: 2015-11-17 14:24:21.26681-05
+#     synergizer db built from: Ensembl Genes 82 / Metazoa Mart / Plant Mart
+#   namespace: ensembl_gene_id
+#   coverage: 100.0%
+# size of "genespace": 7298
+# number of attributes: 15073
+# NOTE: these associations have been restricted to the genes included
+# in the user-supplied gene space.
+# NOTE: the last record consists of all the entities in the
+# "genespace" that are not associated with any attribute (for
+# the requested support).
+# Original number of entities in query: 172
+# Number of entities in query: 172
+# Total number of entities: 7298
+# Total number of attributes: 15073
+# Original total number of attributes: 20030
+# Translation required: yes
+# Translation coverage: 0.999607
+# Mode: unordered
+# Number of simulations: 1000
+# Adjusted P-value cutoff: 0.05
+# Over/under: over
+# Evidence codes: EXP, IMP, ISS, ISM, TAS, IEA, IDA, IGI, ISO, IGC, NAS, IPI, IEP, ISA, RCA, IC
+OVERREPRESENTED ATTRIBUTES
+N	X	LOD	P	P_adj	attrib ID	attrib name
+4	7	1.73523799285541	9.86751474999356e-06	0.013	GO:0033268	node of Ranvier
+4	7	1.73523799285541	9.86751474999356e-06	0.013	GO:0043194	axon initial segment
+11	90	0.80019326957366	7.49966803758565e-06	0.01	GO:0097060	synaptic membrane
+12	108	0.753893875499264	7.82055633151932e-06	0.012	GO:0014069	postsynaptic density
+21	206	0.72513524112174	1.21134284977374e-08	<0.001	GO:0045202	synapse
+14	137	0.714986911072007	3.65477527749094e-06	0.007	GO:0005911	cell-cell junction
+23	249	0.680239023474139	1.54381817898602e-08	<0.001	GO:0044456	synapse part
+39	578	0.55784500912754	1.02062474175121e-09	<0.001	GO:0097458	neuron part
+31	503	0.496267730481682	5.6054599984795e-07	0.002	GO:0060341	regulation of cellular localization
+26	417	0.493046323324632	4.23350242231983e-06	0.007	GO:0032880	regulation of protein localization
+27	439	0.488059425784869	3.49990150373439e-06	0.006	GO:0030054	cell junction
+36	621	0.475310659400426	2.6299532198181e-07	0.001	GO:0051049	regulation of transport
+28	485	0.458679191401493	7.64492681450199e-06	0.011	GO:0044459	plasma membrane part
+25	438	0.448221639484136	3.03241362988799e-05	0.048	GO:0044463	cell projection part
+45	874	0.43285299769691	1.94921129717126e-07	0.001	GO:0032879	regulation of localization
