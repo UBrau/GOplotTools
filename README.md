@@ -7,10 +7,19 @@
 
 #### Workflow to conduct and plot GO analysis using FuncAssociate
 
-1. Generate a list of (foreground) genes and a suitable background
-2. Upload to DAVID or FuncAssociate and run appropriate analysis
-3. Save the result table as well as the 'entity attribute list'
-4. Plot results using plotFuncAssDots()
+**1. Generate a list of (foreground) genes and a suitable background**
+
+A suitable background often is not the whole genome but should represent the set of genes that *could* be found in the analysis, e.g. because they contain alternative splicing events or are expressed in the control sample. It is better to use a unique gene identifier such as the ENCODE gene ID rather than the gene name. Gene names change.
+
+**2. Upload to FuncAssociate (or DAVID) and run appropriate analysis** 
+
+Examples can be found in the *input* folder. Find [FuncAssociate](http://llama.mshri.on.ca/funcassociate/) and [DAVID](https://david.ncifcrf.gov/).
+
+**3. Save the results table as well as the 'entity attribute list'** 
+
+if using FuncAssociate. Examples in the *input* folder.
+
+**4. Plot results using *plotFuncAssDots()***
 
 Huge categories will be removed. If categories overlap more than a threshold, only the more significant one will be kept. Remaining categories will be plotted such that the LOD is on the x-axis, dot size represents the number of genes from the category that were in the foreground, and color reflects p-value:
 
@@ -25,7 +34,7 @@ plotFuncAssDots(file="input/FuncAssociate_results.tsv",
                 wid=9, hei=4.5)
 ~~~~
 
-See plot in _output_ folder for result.
+See plot in *output* folder for result.
 
 #### _Disclaimer:_
 Input checking is imperfect. If it doesn't work, check that you are submitting the correct files.
