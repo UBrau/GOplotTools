@@ -15,7 +15,7 @@ A suitable background often is not the whole genome but should represent the set
 
 Examples can be found in the *input* folder. Find [FuncAssociate](http://llama.mshri.on.ca/funcassociate/) and [DAVID](https://david.ncifcrf.gov/).
 
-**3. Save the results table as well as the 'entity attribute list'** 
+**3. Save the results table as well as the 'Attribute/Entity List'** 
 
 if using FuncAssociate. Examples in the *input* folder.
 
