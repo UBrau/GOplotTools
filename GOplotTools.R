@@ -20,10 +20,6 @@ plotDAVIDclusters <- function(fileUp, fileDown, outName=NA, main="", minXlim=c(-
 ### minXlim:  Minimum coordintes on x-axis. Change if text is cut off.
 ### wid, hei: width and height of the figure (in inches).
 ### min.p:    Select clusters in which at least one category has a min. Benjamini-p-value lower than this
-###
-### U. Braunschweig, 05/2015
-### Changes:  - outName made optional
-###           - x-axis only extends to extremes of data, +/- minXlim
     
     david.plus <- .extractDAVIDcategories(fileUp, min.p=min.p)
     david.plus <- matrix(david.plus$score, nrow=1, dimnames=list(c(), david.plus$category))
@@ -64,9 +60,6 @@ plotDAVIDclusters <- function(fileUp, fileDown, outName=NA, main="", minXlim=c(-
 ### is chosen as the label.
 ###
 ### Value: data.frame() with slots "category", "score" (DAVID cluster score)
-### U. Braunschweig, 05/2015
-### Changes: - Uppercasing of labels only for non-camelCase words
-###          - Fixed a bug that would drop categories that had a score in scientific notation
 
     dat    <- scan(file, what="character", sep="\n")
     headl  <- grep("Annotation Cluster [0-9]+", dat)
@@ -111,7 +104,7 @@ plotFuncAssDots <- function(file, outName=NA, main="", minLOD=log10(3), maxX=100
 ### mergeOverlapping: Remove categories due to overlap. If there is mutual overlap of at least mergeOl, only the category
 ###                   with the highest log-odds will be kept. Requires inputGenes and attrEntList.
 ### inputGenes:       The original list of genes submitted to Funcassociate. Only required if mergeOverlapping=TRUE.       
-### attrEntList:      An 'Attribute Entity List' containing mappings of genes to GO terms, which can be downloaded from
+### attrEntList:      An 'Attribute/Entity List' containing mappings of genes to GO terms, which can be downloaded from
 ###                   the FuncAssociate results page. Only required if mergeOverlapping=TRUE.
 ### mergeOl:          Minimum fraction of overlap for mergeOverlapping. If TRUE, if categories have >= minOl of the 
 ###		      enriched genes mutually in common, only the category with strongest enrichment is shown.
@@ -126,8 +119,6 @@ plotFuncAssDots <- function(file, outName=NA, main="", minLOD=log10(3), maxX=100
 ### minXlim:          Minimum coordintes on x-axis. Change if text is cut off. If legend is requested, will me made at
 ###                   least 2 more than the largest LOD.
 ### wid, hei:         Width and height of the figure (in inches).
-###
-### U. Braunschweig, 2019-2021
 
     library(plotrix)
     library(parallel)
@@ -161,6 +152,13 @@ plotFuncAssDots <- function(file, outName=NA, main="", minLOD=log10(3), maxX=100
     catGenes <- read.csv(attrEntList, sep="\t", as.is=T)
     catGenes <- catGenes[match(c(as.character(fa$over$attrib.ID), as.character(fa$under$attrib.ID)),
                                catGenes$Significant.attribute),]
+    if (class(catGenes) != "data.frame" ||
+        ncol(catGenes)  != 3 ||
+        !all(c("Significant.attribute", "Significant.attribute.description", "Entity.list") == names(catGenes)))
+    {
+        stop("Are you sure you are using the Attribute/Entity List (and not e.g. the Entity/Attribute List) from FuncAssociate?")
+    }
+    
     catGenes <- list(cat   = catGenes[,1],
                      name  = catGenes[,2],
                      genes = strsplit(as.character(catGenes[,3]), split=" ")
@@ -346,8 +344,6 @@ plotFuncAssCategories <- function(fileUp=NA, fileDown=NA, outName=NA, main="", m
 ### invertNegOrder: Invert the order of categories in fileDown (only if fileUp is provided); logical
 ### minXlim:        Minimum coordintes on x-axis. Change if text is cut off.
 ### wid, hei:       Width and height of the figure (in inches).
-###
-### U. Braunschweig, 05/2015
 
     if (is.na(fileUp) & is.na(fileDown)) {stop("Need at least one input file!")}
     noCategs <- FALSE
@@ -451,7 +447,7 @@ plotFuncAssCategories <- function(fileUp=NA, fileDown=NA, outName=NA, main="", m
 ###   maxCat:  Report up to this number of categories of both over- and underrepresented [default:all categories]
 ### Value:
 ###   list of two data.frame() with FuncAssociate tables
-### U. Braunschweig, 05/2015
+    
     dat    <- scan(file, what="character", sep="\n", blank.lines.skip=F)
     overHeadInd  <- grep("OVERREPRESENTED ATTRIBUTES", dat)
     underHeadInd <- grep("UNDERREPRESENTED ATTRIBUTES", dat)
