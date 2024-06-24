@@ -1,85 +1,286 @@
-### Tools to parse and plot GO analysis results from DAVID and FuncAssociate
+### Tools to conduct GO analysis and/or parse and plot results from g:Profiler, FuncAssociate and DAVID
 ###
 ### User functions:
-### - plotDAVIDclusters():     Plot DAVID cluster scores as bar graph
+### - runGprofiler():          Run GO analysis locally with the g:GOSt function of g:Profiler
+### - plotGprofilerDots():     Generate lollipop plot of results generated with runGprofiler()
+###                            or from web interface. If the latter, add column 'log2Enr' with 
+###                            log2 (enrichment).
+### - plotFuncAssDots():       Generate lollipop plot of results obtained with FuncAssociate
 ### - plotFuncAssCategories(): Plot FuncAssociate enrichment scores as bar graph
-### - plotFuncAssDots():       Plot FuncAssociate enrichments, p-values and #genes as bar dot plot
-### To use, source() this this file and invoke one of the three functions
+### - plotDAVIDclusters():     Plot DAVID cluster scores as bar graph
+### To use, source() this this file and invoke one of the functions
 ###
-### U. Braunschweig, 2016-2021
+### U. Braunschweig, 2016-2024
 
-
-plotDAVIDclusters <- function(fileUp, fileDown, outName=NA, main="", minXlim=c(-7,7), wid=7, hei=5, min.p=0.01,
-                              colUp="brown1", colDown="dodgerblue") {
-### Plot the DAVID cluster scores and category names extracted with extractCategories()
+runGprofiler <- function(
+    fore, back = NULL, species, 
+    sources = c("GO","KEGG","REAC","TF","CORUM","HPA")[1:2],
+    ordered = FALSE,
+    exclude_iea = FALSE,
+    measure_underrepresentation = FALSE,
+    user_threshold = 0.05,
+    outDir  = ".",
+    outBase = "gProfilerOut"
+    ) {
+### Run g:GOSt from the g:Profiler suite locally, based on a list with ENSENBL gene IDs
+### and optional custom background.
+### 
+### fore:           Vector of ENSEMBL gene IDs (in which to look for enriched categories)
+### back:           (Optional) custum background
+### species:        Species identifier, e.g. 'mmusculus', 'hsapiens'
+### sources:        Annotation sources [default: GO, KEGG]
+### ordered:        Ordered query
+### exclude_iea: Exclude electronically inferred annotations
+### measure_underrepresentation: As the name suggests
+### user_threshold: Threshold for p-value considered significant [default: 0.05]
+### outDir:         Directory for saving results [default: ./]
+### outBase:        Base name for saving results. Set to NA to skip saving. [default: gProfilerOut]
 ###
-### fileUp:   Path of file with "upregulated" terms
-### fileDown: Path of file with "downregulated" terms
-### outName:  Optional name of plot file (will save a pdf)
-### main:     Figure main header
-### minXlim:  Minimum coordintes on x-axis. Change if text is cut off.
-### wid, hei: width and height of the figure (in inches).
-### min.p:    Select clusters in which at least one category has a min. Benjamini-p-value lower than this
-    
-    david.plus <- .extractDAVIDcategories(fileUp, min.p=min.p)
-    david.plus <- matrix(david.plus$score, nrow=1, dimnames=list(c(), david.plus$category))
-    if (ncol(david.plus) == 0) {david.plus <- matrix(0)}
+### Value: List of length two: 
+###        $result: data.frame with categories, enriched with log2-fold enrichment
+###        $meta: metadata
+### Optionally, a CSV file with enriched categories and an R archive
+###        with metadata are saved
 
-    david.minus <- .extractDAVIDcategories(fileDown, min.p=min.p)
-    david.minus <- matrix(-1 * david.minus$score, nrow=1, dimnames=list(c(), david.minus$category))
-    if (ncol(david.minus) == 0) {david.minus <- matrix(0)}
-    
-    david <- cbind(david.plus,david.minus)
-    
-    xlim.fig  <- c(min(minXlim[1],floor(min(david, na.rm=T))), max(minXlim[2],ceiling(max(david, na.rm=T))))
-    xlim.plot <- c(floor(min(0, david, na.rm=T)), ceiling(max(0, david, na.rm=T)))
-    
-    if (!is.na(outName)) pdf(outName, wid=wid, hei=hei)
-    oldpar <- par(no.readonly=T)
-    par(mar=c(5,1,4,1))
-    plot(1,1,type="n", bty="n", xlim=xlim.fig, ylim=c(0.6, ncol(david) + 1), xaxt="n",yaxt="n",
-         xlab="DAVID cluster score", ylab="", main = main)
-    axis(1, at=xlim.plot[1]:xlim.plot[2], labels=abs(c(xlim.plot[1]:xlim.plot[2])))
-    abline(v=0)
-    rect(0, ncol(david):(ncol(david.minus) + 1) - 0.1, david.plus, ncol(david):(ncol(david.minus) + 1) + 0.7,
-         col=rep(colUp, ncol(david.plus)))
-    rect(0, 1:ncol(david.minus) - 0.4, david.minus, 1:ncol(david.minus) + 0.4,
-         col=rep(colDown, ncol(david.minus)))
-    text(-0.1, ncol(david):(ncol(david.minus) + 1) + 0.3, dimnames(david.plus)[[2]], pos=2, cex=1.1)
-    text(0.1, 1:ncol(david.minus), dimnames(david.minus)[[2]], pos=4, cex=1.1)
-    par(oldpar)
-    if (!is.na(outName)) dev.off()
+    libMissing <- !require("gprofiler2", quietly=T) && stop("Failed to load R package 'gprofiler2'")
+
+    go <- gost(
+        fore,
+        custom_bg      = back,
+        domain_scope   = ifelse(is.null(back), "annotated", "custom"),
+        organism       = species,
+        exclude_iea    = exclude_iea,
+        measure_underrepresentation = measure_underrepresentation,
+        user_threshold = user_threshold,
+        ordered_query  = ordered,
+        multi_query    = FALSE,
+        sources        = c("GO", "REAC", "KEGG", "TF", "CORUM", "HPA"),
+        highlight      = TRUE
+    )
+
+    go.log2Enr     <- log2(
+        (go$result$intersection_size / go$result$query_size) / (go$result$term_size / go$result$effective_domain_size)
+    )
+
+    res <- data.frame(
+        go$result,
+        log2Enr = go.log2Enr
+    )
+    res <- res[order(res$significant, res$log2Enr, decreasing = TRUE), c(1, 16, 2:15)]
+    res$parents <- sapply(res$parents, paste, collapse=", ")
+
+    if (!is.na(outBase)) {
+        write.csv(
+            res, row.names = FALSE,
+            file = file.path(outDir, paste0(outBase, "_results.csv"))
+        )
+        tmp <- go$meta
+        save(
+            tmp,
+            file = file.path(outDir, paste0(outBase, "_metadata.Rdata"))
+        )
+    }
+    ### This does not allow multi-queries, in which case the structure is different
+
+    list(
+        result = res,
+        meta   = go$meta
+    )
 }
 
 
-.extractDAVIDcategories <- function(file, min.p=0.01) {
-### Called by plotDAVIDclusters()
-### Given the name of a file that contains DAVID output (clustering tool),
-### return only clusters with at least one category below a certain Benjamini p-value.
-### The category within the cluster with the lowest (Bonferroni corrected) p-value
-### is chosen as the label.
+
+plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
+                            minLog2Enr=log2(3), maxX=1000, maxCat=NA,
+                            onlyHighlighted=TRUE, 
+                            scaleNmax=NA, scalePmin=0.001, scalePmax=0.1,
+                            simplePcol=TRUE, minPcol="brown1", maxPcol="indianred4",
+                            sourceCol = c(GO="black", KEGG="cadetblue4", REAC="bisque4", TF="coral4", CORUM="darkorchid4", HPA="goldenrod4"),
+                            circleScale=0.25, legend=TRUE,
+                            minXlim=c(-10,4), wid=7, hei=5) {
+### Plot the log2-fold enrichment and category names from g:Profiler/g:GOSt analysis as dots,
+### with location indicating log2-enrichment, size indicating number of genes, and shading adjusted p-value.
+### Currently, only output with only overrepresented OR underrepresented terms is supported.
 ###
-### Value: data.frame() with slots "category", "score" (DAVID cluster score)
+### over:             Over-represented terms from g:GOSt query (single query) with added 'log2Enr' column (data.frame)
+### under:            (Optional) like over, for under-represented terms
+### outName:          (Optional) Name of plot file (will save a pdf)
+### main:             Figure main header
+### minLog2Enr:       Minimum |log2(enrichment)| to report categories [default: log2(3)]
+### maxX:             Maximum total number of genes associated with a term in the whole gene space for it to be reported
+###                   (to remove too broad categories)
+### maxCat:           Report up to this number of (over- or underrepresented) categories for each file
+###                   [default:all categories]
+### onlyHighlighted:  Plot only driver terms 'highlighted' by g:GOSt [default]
+### scaleNmax:        Number of genes in group corresponding to largest possible circle
+### scalePmin:        P value corresponding to most saturated color
+### scalePmax:        P value corresponding to white
+### simplePcol:       (Logical) Should a simplified P-value color scheme with two cutoffs be used rather than a scale
+### minPcol:          Color to display p-values. If simplePcol=TRUE, the lower threshold.
+### maxPcol:          Color to display v-values lower than the higher threshold; ingored if simplePcolor=FALSE.
+### circleScale:      Scale all circles by this factor (1=100%). Useful because circle size depends on x axis.
+### legend:           Plot a legend?
+### minXlim:          Minimum coordintes on x-axis. Change if text is cut off. If legend is requested, will me made at
+###                   least 2 more than the largest LOD.
+### wid, hei:         Width and height of the figure (in inches).
 
-    dat    <- scan(file, what="character", sep="\n")
-    headl  <- grep("Annotation Cluster [0-9]+", dat)
-    headl <- c(headl, length(dat)+1) # add one more to have an end for the last record
-    score  <- as.numeric(sub(".*Score: ([0-9.E-]+)$", "\\1", dat[headl[-length(headl)]]))
-    catlines <- lapply(1:(length(headl) - 1), FUN=function(x) {(headl[x]+2):(headl[x + 1] - 1)})
-    topCat  <- sapply(catlines, FUN=function(x) {
-        tmp <- strsplit(dat[x], split="\t")
-        min.pBonf <- which.min(sapply(tmp, FUN=function(x) {x[11]}))
-        label <- sub(".+[~:]","", sapply(tmp, FUN=function(x) {x[2]}))[min.pBonf]
-        .properlyUppercase(label)
-    })
-    min.pBenj <- sapply(catlines, FUN=function(x) {
-        tmp <- strsplit(dat[x], split="\t")
-        min(sapply(tmp, FUN=function(x) {as.numeric(x[12])}))
-    })
+    libMissing <- !require("plotrix", quietly=T) && stop("Failed to load R package 'plotrix'")
 
-    data.frame(category = topCat,
-               score    = score
-               )[min.pBenj < min.p,]
+    noCategs <- FALSE
+
+    if (simplePcol & is.na(maxPcol)) {stop("maxPcol must be provided if simplePcol is TRUE")}
+    if (!simplePcol & !is.na(maxPcol)) {warning("maxPcol is ignored if simplePcol is FALSE")}
+
+    ## If no underrepresentation table, add dummy
+    if (is.null(under)) {
+        fa <- list(over, over[c(),])
+    } else {
+        fa <- list(over, under)
+    }
+
+    ## Parse input and restrict to plottable categories
+    if (onlyHighlighted) {
+        fa <- lapply(fa, FUN=function(x) {x[x$highlighted,]})
+    }
+    fa <- lapply(fa, FUN=function(x) {
+                      if (nrow(x) == 0) {
+                          return(x)
+                      } else {
+                          x <- x[abs(x$log2Enr) >= minLog2Enr,]
+                          if (nrow(x) > 0) {
+                              x$term_name <- .properlyUppercase(x$term_name)
+                              return(x)
+                          } else {
+                              return(x)
+                          }
+                      }
+    })
+    names(fa) <- c("over", "under")
+
+    exceedMaxX <- lapply(fa, FUN=function(x) {which(x$term_size > maxX)}) 
+    if (sum(sapply(exceedMaxX, length)) > 0) {
+        warning(paste(sum(sapply(exceedMaxX, length)), "categories with more than", maxX, "genes removed:\n"), 
+            paste(fa$over$term_name[exceedMaxX[[1]]], fa$under$term_name[exceedMaxX[[2]]], collapse="\n"),
+            sep="\n")
+        fa <- lapply(1:length(fa), FUN=function(x) {fa[[x]][fa[[x]]$term_size <= maxX,]})
+        names(fa) <- c("over", "under")
+    }
+    if (nrow(fa$over) > 0 & nrow(fa$under) > 0) {
+        stop("Output with both over- and unerrepresented categories currently not supported")
+    }
+
+    if (!is.na(maxCat) && any(sapply(fa, nrow) > maxCat)) {
+        warning("Truncating to top ", maxCat, " categories")
+        fa <- lapply(fa, FUN=head, n=maxCat)
+    }
+    fa <- rbind(fa$over, fa$under)
+
+    ## Calculate dot color and radius, category colors
+    noCategs <- nrow(fa) < 1
+    if (!noCategs) {
+        fa$rad <- sqrt(fa$intersection_size)
+        if (is.na(scaleNmax)) {scaleNmax <- max(fa$intersection_size)}
+        fa$rad <- fa$rad  / sqrt(scaleNmax)
+        
+        if (simplePcol) {
+            tmp <- fa$p_value
+            fa$col <- "grey70"
+            fa$col[tmp < 0.05] <- maxPcol
+            fa$col[tmp < 0.001] <- minPcol
+        } else {
+            fa$col <- -log10(fa$p_value)
+            if (is.na(scalePmin)) {scalePmin <- 10 ^ -max(fa$col)}
+            if (is.na(scalePmax)) {scalePmax <- 10 ^ -min(fa$col)}
+            palette <- colorRampPalette(c("white", minPcol))(10)
+            fa$col <- (fa$col + log10(scalePmax)) / (-log10(scalePmin) + log10(scalePmax))
+            fa$col <-  palette[1 + round(fa$col * (length(palette) - 1))]
+        }
+
+        fa$textCol <- "black"
+        fa$textCol <- sapply(sub("(GO):.{2}", "\\1", fa$source), FUN=function(x) {sourceCol[names(sourceCol) == x]})
+        sourceCol <- sourceCol[names(sourceCol) %in% sub("(GO):.{2}", "\\1", fa$source)]
+
+        xlim.fig  <- c(min(minXlim[1], floor(min(fa$log2Enr, na.rm=T))),
+                       max(minXlim[2], ceiling(max(fa$log2Enr, na.rm=T))))
+    } else {
+        xlim.fig <- c(-1,1)
+    }
+
+    ## Other plot preparations
+    xlim.plot <- c(floor(min(c(0, fa$log2Enr), na.rm=T)),
+                   ceiling(max(c(0, fa$log2Enr), na.rm=T)))
+    if (legend & xlim.fig[2] < xlim.plot[2] + 2) {xlim.fig[2] <- xlim.plot[2] + 2}
+    ylim <- c(0, nrow(fa) + 1)
+    
+    
+    ## Plot
+    if (!is.na(outName)) pdf(outName, wid=wid, hei=hei)
+    oldpar <- par(no.readonly=T)
+    
+    par(mar=c(5,1,5,1))
+    plot(1,1,type="n", bty="n", xlim=xlim.fig,
+         ylim=ylim, yaxs="i",
+         xaxt="n",yaxt="n",
+         xlab="", ylab="", main = main)
+    if (noCategs) {
+        text(0, 0.5, "No enriched categories", col=fa$textCol)
+    } else {
+        for (i in 1:nrow(fa)) {
+            draw.circle(x=fa$log2Enr[nrow(fa):1][i], y=i,
+                        radius=circleScale * fa$rad[nrow(fa):1][i], col=fa$col[nrow(fa):1][i])
+        }
+        segments(x0=0, y0=(nrow(fa):1), x1=fa$log2Enr, lty=3)
+        text(0, nrow(fa):1, fa$term_name, pos=ifelse(fa$log2Enr < 0, 4, 2), col = fa$textCol)
+    }
+    abline(v=0)
+    axis(1, at=xlim.plot[1]:xlim.plot[2])
+    axis(3, at=xlim.plot[1]:xlim.plot[2])
+    title(xlab="log2 (enrichment)")
+    
+    ## Legend
+    if (legend & !noCategs) {
+        par(xpd=NA)
+        if (nrow(fa) < 10) {
+            yleg <- seq(ylim[2], ylim[1], length.out=10)
+        } else {
+            yleg <- ylim[2]:(ylim[2]-9)
+        }
+
+        xleg <- xlim.fig[2] - circleScale * c(2.1, 1)
+        if (simplePcol) {
+            legCol <- c(maxPcol, minPcol)
+            legP <- c("<0.05","<0.001")
+            for (i in c(1,2)) {
+                draw.circle(x=xleg[2], y=yleg[2:3][i], radius=circleScale * 0.4, col=legCol[i])
+            }
+            text(xleg[1], yleg[2:3], adj=c(1, 0.5), labels=legP)
+        } else {
+            legCol <- colorRampPalette(c("white", minPcol))(4)
+            legP   <- signif(10 ^ -seq(-log10(scalePmax), -log10(scalePmin), length.out=4), 1)
+            if (lessFlag) legP[length(legP)] <- paste("<", legP[length(legP)], sep="")
+            for (i in 1:4) {
+                draw.circle(x=xleg[2], y=yleg[2:5][i], radius=circleScale * 0.4, col=legCol[i])
+            }
+            text(xleg[1], yleg[2:5], adj=c(1, 0.5), labels=legP)
+        }
+
+        nSizeCirc <- min(4, length(unique(fa$intersection_size)))
+        legN <- round(seq(min(fa$intersection_size), scaleNmax, length.out=nSizeCirc))
+        legRad <- sqrt(legN)  / sqrt(scaleNmax)
+        for (i in 1:nSizeCirc) {
+            draw.circle(x=xleg[2], y=yleg[7:(6 + nSizeCirc)][i], radius=circleScale * legRad[i], col=NA)
+        }
+        text(xleg[1], yleg[7:(6 + nSizeCirc)], adj=c(1, 0.5), labels=legN)
+        text(mean(xleg),  0.95*(yleg[9] - yleg[10]) + yleg[c(2,7)], adj=c(0.5, 0.5), c("P (adj.)", "# genes"))
+
+        if (!all(names(sourceCol) == "GO")) {
+            legend("bottomleft", text.col=sourceCol, names(sourceCol))
+        }
+        par(xpd=FALSE)        
+    }
+       
+    par(oldpar)
+    if (!is.na(outName)) dev.off()
 }
 
 
@@ -279,55 +480,6 @@ plotFuncAssDots <- function(file, outName=NA, main="", minLOD=log10(3), maxX=100
 }
 
 
-.reduceOlCategories <- function(fa, inpGenes, catGenes, mergeOl, maxCat, mergeOverlapping, cores=1) {
-### Called by plotFuncAssCategories to merge and reduce the number of cats for plotting
-    tmp <- rbind(fa$over, fa$under)
-
-    if (mergeOverlapping && nrow(fa$over) + nrow(fa$under) > 1) {
-        catOl <- mcmapply(1:length(catGenes$cat), FUN=function(x) {sapply(1:length(catGenes$cat), FUN=function(y) {
-            length(which(catGenes$genes[[x]] %in% catGenes$genes[[y]]))
-        })}, mc.cores=cores)
-        catLink <- catOl / sapply(1:length(catGenes$genes), FUN=function(x) {sapply(catGenes$genes, length)}) >= mergeOl
-        diag(catLink) <- FALSE
-        nets <- lapply(1:nrow(catLink), FUN=function(x) {which((catLink & t(catLink))[x,])})  # mutual overlap
-        nets <- lapply(1:length(nets), FUN=function(x) {
-            if (length(nets[[x]] > 0)) {
-                return(sort(c(x, nets[[x]])))
-            } else {
-                return(NA)
-            }
-        })
-        nets <- nets[sapply(nets, FUN=function(x) {!all(is.na(x))})]
-        nets <- nets[!duplicated(sapply(nets, FUN=function(x) {paste(x, collapse=" ")}))]
-        remove <- data.frame(keep   = 1:nrow(catOl) %in% unlist(lapply(nets, FUN=function(x) {x[which.max(tmp$LOD[x])]})),
-                             remove = 1:nrow(catOl) %in% unlist(lapply(nets, FUN=function(x) {setdiff(x, x[which.max(tmp$LOD[x])])}))
-                             )
-        remove <- remove$remove & !remove$keep  # remove categories only if they are not supposed to represent another cluster
-        
-        if (any(remove)) {
-            warning(paste(length(which(remove)), "categories removed due to overlap:\n"), 
-                    paste(tmp$attrib.name[remove], collapse="\n"),
-                    sep="\n")
-        }
-        
-        fa$over  <- fa$over[!(fa$over$attrib.ID %in% tmp$attrib.ID[remove]),]
-        fa$under <- fa$under[!(fa$under$attrib.ID %in% tmp$attrib.ID[remove]),]
-    }
-
-    exceedMaxCat <- sapply(fa, nrow) - maxCat
-    if (!is.na(exceedMaxCat[1]) && exceedMaxCat[1] > 0) {
-        warning(exceedMaxCat[1], " overrepresented categories exceeded maxCat\n")
-        fa$over <- fa$over[1:maxCat,]
-    }
-    if (!is.na(exceedMaxCat[2]) && exceedMaxCat[2] > 0) {
-        warning(exceedMaxCat[2], " underrepresented categories exceeded maxCat\n")
-        fa$under <- fa$under[1:maxCat,]
-    }
-
-    if (nrow(fa$under) > 1) {fa$under <- fa$under[nrow(fa$under):1,]}
-    rbind(fa$over, fa$under)
-}
-
 
 plotFuncAssCategories <- function(fileUp=NA, fileDown=NA, outName=NA, main="", min.LOD=log10(5), maxCat=NA,
                                   invertNegOrder=TRUE,
@@ -487,6 +639,133 @@ plotFuncAssCategories <- function(fileUp=NA, fileDown=NA, outName=NA, main="", m
     }
     dat
 }
+
+
+
+.reduceOlCategories <- function(fa, inpGenes, catGenes, mergeOl, maxCat, mergeOverlapping, cores=1) {
+### Called by plotFuncAssCategories/plotFuncAssDots to merge and reduce the number of categories for plotting
+    tmp <- rbind(fa$over, fa$under)
+
+    if (mergeOverlapping && nrow(fa$over) + nrow(fa$under) > 1) {
+        catOl <- mcmapply(1:length(catGenes$cat), FUN=function(x) {sapply(1:length(catGenes$cat), FUN=function(y) {
+            length(which(catGenes$genes[[x]] %in% catGenes$genes[[y]]))
+        })}, mc.cores=cores)
+        catLink <- catOl / sapply(1:length(catGenes$genes), FUN=function(x) {sapply(catGenes$genes, length)}) >= mergeOl
+        diag(catLink) <- FALSE
+        nets <- lapply(1:nrow(catLink), FUN=function(x) {which((catLink & t(catLink))[x,])})  # mutual overlap
+        nets <- lapply(1:length(nets), FUN=function(x) {
+            if (length(nets[[x]] > 0)) {
+                return(sort(c(x, nets[[x]])))
+            } else {
+                return(NA)
+            }
+        })
+        nets <- nets[sapply(nets, FUN=function(x) {!all(is.na(x))})]
+        nets <- nets[!duplicated(sapply(nets, FUN=function(x) {paste(x, collapse=" ")}))]
+        remove <- data.frame(keep   = 1:nrow(catOl) %in% unlist(lapply(nets, FUN=function(x) {x[which.max(tmp$LOD[x])]})),
+                             remove = 1:nrow(catOl) %in% unlist(lapply(nets, FUN=function(x) {setdiff(x, x[which.max(tmp$LOD[x])])}))
+                             )
+        remove <- remove$remove & !remove$keep  # remove categories only if they are not supposed to represent another cluster
+        
+        if (any(remove)) {
+            warning(paste(length(which(remove)), "categories removed due to overlap:\n"), 
+                    paste(tmp$attrib.name[remove], collapse="\n"),
+                    sep="\n")
+        }
+        
+        fa$over  <- fa$over[!(fa$over$attrib.ID %in% tmp$attrib.ID[remove]),]
+        fa$under <- fa$under[!(fa$under$attrib.ID %in% tmp$attrib.ID[remove]),]
+    }
+
+    exceedMaxCat <- sapply(fa, nrow) - maxCat
+    if (!is.na(exceedMaxCat[1]) && exceedMaxCat[1] > 0) {
+        warning(exceedMaxCat[1], " overrepresented categories exceeded maxCat\n")
+        fa$over <- fa$over[1:maxCat,]
+    }
+    if (!is.na(exceedMaxCat[2]) && exceedMaxCat[2] > 0) {
+        warning(exceedMaxCat[2], " underrepresented categories exceeded maxCat\n")
+        fa$under <- fa$under[1:maxCat,]
+    }
+
+    if (nrow(fa$under) > 1) {fa$under <- fa$under[nrow(fa$under):1,]}
+    rbind(fa$over, fa$under)
+}
+
+
+
+plotDAVIDclusters <- function(fileUp, fileDown, outName=NA, main="", minXlim=c(-7,7), wid=7, hei=5, min.p=0.01,
+                              colUp="brown1", colDown="dodgerblue") {
+### Plot the DAVID cluster scores and category names extracted with extractCategories()
+###
+### fileUp:   Path of file with "upregulated" terms
+### fileDown: Path of file with "downregulated" terms
+### outName:  Optional name of plot file (will save a pdf)
+### main:     Figure main header
+### minXlim:  Minimum coordintes on x-axis. Change if text is cut off.
+### wid, hei: width and height of the figure (in inches).
+### min.p:    Select clusters in which at least one category has a min. Benjamini-p-value lower than this
+    
+    david.plus <- .extractDAVIDcategories(fileUp, min.p=min.p)
+    david.plus <- matrix(david.plus$score, nrow=1, dimnames=list(c(), david.plus$category))
+    if (ncol(david.plus) == 0) {david.plus <- matrix(0)}
+
+    david.minus <- .extractDAVIDcategories(fileDown, min.p=min.p)
+    david.minus <- matrix(-1 * david.minus$score, nrow=1, dimnames=list(c(), david.minus$category))
+    if (ncol(david.minus) == 0) {david.minus <- matrix(0)}
+    
+    david <- cbind(david.plus,david.minus)
+    
+    xlim.fig  <- c(min(minXlim[1],floor(min(david, na.rm=T))), max(minXlim[2],ceiling(max(david, na.rm=T))))
+    xlim.plot <- c(floor(min(0, david, na.rm=T)), ceiling(max(0, david, na.rm=T)))
+    
+    if (!is.na(outName)) pdf(outName, wid=wid, hei=hei)
+    oldpar <- par(no.readonly=T)
+    par(mar=c(5,1,4,1))
+    plot(1,1,type="n", bty="n", xlim=xlim.fig, ylim=c(0.6, ncol(david) + 1), xaxt="n",yaxt="n",
+         xlab="DAVID cluster score", ylab="", main = main)
+    axis(1, at=xlim.plot[1]:xlim.plot[2], labels=abs(c(xlim.plot[1]:xlim.plot[2])))
+    abline(v=0)
+    rect(0, ncol(david):(ncol(david.minus) + 1) - 0.1, david.plus, ncol(david):(ncol(david.minus) + 1) + 0.7,
+         col=rep(colUp, ncol(david.plus)))
+    rect(0, 1:ncol(david.minus) - 0.4, david.minus, 1:ncol(david.minus) + 0.4,
+         col=rep(colDown, ncol(david.minus)))
+    text(-0.1, ncol(david):(ncol(david.minus) + 1) + 0.3, dimnames(david.plus)[[2]], pos=2, cex=1.1)
+    text(0.1, 1:ncol(david.minus), dimnames(david.minus)[[2]], pos=4, cex=1.1)
+    par(oldpar)
+    if (!is.na(outName)) dev.off()
+}
+
+
+.extractDAVIDcategories <- function(file, min.p=0.01) {
+### Called by plotDAVIDclusters()
+### Given the name of a file that contains DAVID output (clustering tool),
+### return only clusters with at least one category below a certain Benjamini p-value.
+### The category within the cluster with the lowest (Bonferroni corrected) p-value
+### is chosen as the label.
+###
+### Value: data.frame() with slots "category", "score" (DAVID cluster score)
+
+    dat    <- scan(file, what="character", sep="\n")
+    headl  <- grep("Annotation Cluster [0-9]+", dat)
+    headl <- c(headl, length(dat)+1) # add one more to have an end for the last record
+    score  <- as.numeric(sub(".*Score: ([0-9.E-]+)$", "\\1", dat[headl[-length(headl)]]))
+    catlines <- lapply(1:(length(headl) - 1), FUN=function(x) {(headl[x]+2):(headl[x + 1] - 1)})
+    topCat  <- sapply(catlines, FUN=function(x) {
+        tmp <- strsplit(dat[x], split="\t")
+        min.pBonf <- which.min(sapply(tmp, FUN=function(x) {x[11]}))
+        label <- sub(".+[~:]","", sapply(tmp, FUN=function(x) {x[2]}))[min.pBonf]
+        .properlyUppercase(label)
+    })
+    min.pBenj <- sapply(catlines, FUN=function(x) {
+        tmp <- strsplit(dat[x], split="\t")
+        min(sapply(tmp, FUN=function(x) {as.numeric(x[12])}))
+    })
+
+    data.frame(category = topCat,
+               score    = score
+               )[min.pBenj < min.p,]
+}
+
 
 .properlyUppercase <- function(x) {
 ### Called by other functions; creates plot-ready capitalization of GO terms
