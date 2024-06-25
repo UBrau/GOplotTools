@@ -19,7 +19,6 @@ runGprofiler <- function(
     exclude_iea = FALSE,
     measure_underrepresentation = FALSE,
     user_threshold = 0.05,
-    outDir  = ".",
     outBase = "gProfilerOut"
     ) {
 ### Run g:GOSt from the g:Profiler suite locally, based on a list with ENSENBL gene IDs
@@ -33,7 +32,6 @@ runGprofiler <- function(
 ### exclude_iea: Exclude electronically inferred annotations
 ### measure_underrepresentation: As the name suggests
 ### user_threshold: Threshold for p-value considered significant [default: 0.05]
-### outDir:         Directory for saving results [default: ./]
 ### outBase:        Base name for saving results. Set to NA to skip saving. [default: gProfilerOut]
 ###
 ### Value: List of length two: 
@@ -55,9 +53,16 @@ runGprofiler <- function(
         ordered_query  = ordered,
         multi_query    = FALSE,
         sources        = c("GO", "REAC", "KEGG", "TF", "CORUM", "HPA"),
-        highlight      = TRUE
+        highlight      = !ordered
     )
 
+    if (is.null(go)) {
+        write.csv(
+            "No significant results", row.names = FALSE,
+            file = paste0(outBase, "_NOresults.csv")
+        )
+        return(NULL)
+    }
     go.log2Enr     <- log2(
         (go$result$intersection_size / go$result$query_size) / (go$result$term_size / go$result$effective_domain_size)
     )
@@ -66,18 +71,24 @@ runGprofiler <- function(
         go$result,
         log2Enr = go.log2Enr
     )
-    res <- res[order(res$significant, res$log2Enr, decreasing = TRUE), c(1, 16, 2:15)]
+
+    res <- res[order(res$significant, res$log2Enr, res$intersection_size, decreasing = TRUE),]
     res$parents <- sapply(res$parents, paste, collapse=", ")
+    if (ordered) {
+        res <- res[c(1, 15, 2:14)]
+    } else {
+        res <- res[,c(1, 16, 2:15)]
+    }
 
     if (!is.na(outBase)) {
         write.csv(
             res, row.names = FALSE,
-            file = file.path(outDir, paste0(outBase, "_results.csv"))
+            file = paste0(outBase, "_results.csv")
         )
         tmp <- go$meta
         save(
             tmp,
-            file = file.path(outDir, paste0(outBase, "_metadata.Rdata"))
+            file = paste0(outBase, "_metadata.Rdata")
         )
     }
     ### This does not allow multi-queries, in which case the structure is different
@@ -96,7 +107,7 @@ plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
                             scaleNmax=NA, scalePmin=0.001, scalePmax=0.1,
                             simplePcol=TRUE, minPcol="brown1", maxPcol="indianred4",
                             sourceCol = c(GO="black", KEGG="cadetblue4", REAC="bisque4", TF="coral4", CORUM="darkorchid4", HPA="goldenrod4"),
-                            circleScale=0.25, legend=TRUE,
+                            circleScale=0.25, legend=TRUE, sourceLegendPos="bottomleft",
                             minXlim=c(-10,4), wid=7, hei=5) {
 ### Plot the log2-fold enrichment and category names from g:Profiler/g:GOSt analysis as dots,
 ### with location indicating log2-enrichment, size indicating number of genes, and shading adjusted p-value.
@@ -120,6 +131,7 @@ plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
 ### maxPcol:          Color to display v-values lower than the higher threshold; ingored if simplePcolor=FALSE.
 ### circleScale:      Scale all circles by this factor (1=100%). Useful because circle size depends on x axis.
 ### legend:           Plot a legend?
+### sourceLegendPos:  Position of the sources legend [default: bottomleft]
 ### minXlim:          Minimum coordintes on x-axis. Change if text is cut off. If legend is requested, will me made at
 ###                   least 2 more than the largest LOD.
 ### wid, hei:         Width and height of the figure (in inches).
@@ -274,7 +286,7 @@ plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
         text(mean(xleg),  0.95*(yleg[9] - yleg[10]) + yleg[c(2,7)], adj=c(0.5, 0.5), c("P (adj.)", "# genes"))
 
         if (!all(names(sourceCol) == "GO")) {
-            legend("bottomleft", text.col=sourceCol, names(sourceCol))
+            legend(sourceLegendPos, text.col=sourceCol, names(sourceCol))
         }
         par(xpd=FALSE)        
     }
