@@ -24,13 +24,16 @@ Examples can be found in the *input* folder.
 #### 2b. Run g:Profiler analysis locally
 
 using runGprofiler(), which uses the _gProfiler2_ package (Kolberg et al., _F1000Research_ 2020).
+See arguments to change species, data sources etc.
 
 #### 3. Plot results using one of the plotting functions
 
 For examples of 'lollipop' plots based on g:Profiler and FuncAssociate see _output_ folder.
 
-**g:Profiler**
+**g:Profiler:**
 Huge categories will be removed and only 'highlighted' driver categories will be shown by default. See options. Remaining categories will be ploted such that log2-enrichment is on the x-axis, dot size represents the number of genes from the category that were in the foreground, and color reflects p-value. Sources are indicated by text color.
+
+See arguments to tweak filtering behaviour etc.
 
 ~~~~
 source("GOplotTools.R")

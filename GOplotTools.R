@@ -14,7 +14,7 @@
 
 runGprofiler <- function(
     fore, back = NULL, species, 
-    sources = c("GO","KEGG","REAC","TF","CORUM","HPA")[1:2],
+    sources = c("GO", "REAC", "KEGG", "TF", "CORUM", "HPA", "MIRNA", "HP", "HPA", "WP"),
     ordered = FALSE,
     exclude_iea = FALSE,
     measure_underrepresentation = FALSE,
@@ -52,7 +52,7 @@ runGprofiler <- function(
         user_threshold = user_threshold,
         ordered_query  = ordered,
         multi_query    = FALSE,
-        sources        = c("GO", "REAC", "KEGG", "TF", "CORUM", "HPA"),
+        sources        = sources,
         highlight      = !ordered
     )
 
