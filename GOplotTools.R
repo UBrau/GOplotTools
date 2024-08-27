@@ -14,7 +14,7 @@
 
 runGprofiler <- function(
     fore, back = NULL, species, 
-    sources = c("GO", "REAC", "KEGG", "TF", "CORUM", "HPA", "MIRNA", "HP", "HPA", "WP"),
+    sources = c("GO", "REAC", "KEGG", "TF", "CORUM", "HPA", "MIRNA", "HP", "HPA", "WP")[1:6],
     ordered = FALSE,
     exclude_iea = FALSE,
     measure_underrepresentation = FALSE,
@@ -39,7 +39,7 @@ runGprofiler <- function(
 ###        $meta: metadata
 ### Optionally, a CSV file with enriched categories and an R archive
 ###        with metadata are saved
-
+print(sources)
     libMissing <- !require("gprofiler2", quietly=T) && stop("Failed to load R package 'gprofiler2'")
 
     go <- gost(
@@ -106,7 +106,10 @@ plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
                             onlyHighlighted=TRUE, 
                             scaleNmax=NA, scalePmin=0.001, scalePmax=0.1,
                             simplePcol=TRUE, minPcol="brown1", maxPcol="indianred4",
-                            sourceCol = c(GO="black", KEGG="cadetblue4", REAC="bisque4", TF="coral4", CORUM="darkorchid4", HPA="goldenrod4"),
+                            sourceCol = c(
+                                GO="black", KEGG="cadetblue4", REAC="bisque4", TF="coral4", CORUM="darkorchid4",
+                                HPA="goldenrod4", MIRNA="darkolivegreen", HP="deepskyblue3", HPA="khaki3", WP="salmon3"
+                            ),
                             circleScale=0.25, legend=TRUE, sourceLegendPos="bottomleft",
                             minXlim=c(-10,4), wid=7, hei=5) {
 ### Plot the log2-fold enrichment and category names from g:Profiler/g:GOSt analysis as dots,
@@ -152,6 +155,9 @@ plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
 
     ## Parse input and restrict to plottable categories
     if (onlyHighlighted) {
+        if (!all(sapply(fa, FUN=function(x) {"highlighted" %in% names(x)}))) {
+            stop("No information about highlighted categories. Did you submit an ordered query?")
+        }
         fa <- lapply(fa, FUN=function(x) {x[x$highlighted,]})
     }
     fa <- lapply(fa, FUN=function(x) {
