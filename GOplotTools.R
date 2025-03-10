@@ -25,6 +25,7 @@ runGprofiler <- function(
 ### and optional custom background.
 ### 
 ### fore:           Vector of ENSEMBL gene IDs (in which to look for enriched categories)
+###                 or list of such vectors, in case of multi-query
 ### back:           (Optional) custum background
 ### species:        Species identifier, e.g. 'mmusculus', 'hsapiens'
 ### sources:        Annotation sources [default: GO, KEGG]
@@ -51,7 +52,7 @@ print(sources)
         measure_underrepresentation = measure_underrepresentation,
         user_threshold = user_threshold,
         ordered_query  = ordered,
-        multi_query    = FALSE,
+        multi_query    = is.list(fore),
         sources        = sources,
         highlight      = !ordered
     )
