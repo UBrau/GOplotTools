@@ -89,11 +89,12 @@ runGprofiler <- function(
         go.log2Enr <- log2(
             (go$parsed$intersection_size / go$parsed$query_size) / (go$parsed$term_size / go$parsed$effective_domain_size)
         )
-        res <- data.frame(
-            go$result
-        )
+
+        res <- go$result
         res$log2Enr = lapply(1:nrow(go.log2Enr), function(x) {go.log2Enr[x,]})
-        
+        for (i in which(sapply(res, is.list))) {
+            res[,i] <- sapply(res[,i], function(x) {paste0(x, collapse = ",")})
+        }
         if (ordered) {
             res <- res[c(1, 12, 2:11)]
         } else {
@@ -130,9 +131,9 @@ runGprofiler <- function(
             file = paste0(outBase, "_results.csv")
         )
         
-        
+        meta <- go$meta
         save(
-            go$meta,
+            meta,
             file = paste0(outBase, "_metadata.Rdata")
         )
     }
