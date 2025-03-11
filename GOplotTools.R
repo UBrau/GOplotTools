@@ -5,12 +5,13 @@
 ### - plotGprofilerDots():     Generate lollipop plot of results generated with runGprofiler()
 ###                            or from web interface. If the latter, add column 'log2Enr' with 
 ###                            log2 (enrichment).
+### - plotGprofilerMulti():    Generate heatmap of results generated with multi-query runGprofiler()
 ### - plotFuncAssDots():       Generate lollipop plot of results obtained with FuncAssociate
 ### - plotFuncAssCategories(): Plot FuncAssociate enrichment scores as bar graph
 ### - plotDAVIDclusters():     Plot DAVID cluster scores as bar graph
 ### To use, source() this this file and invoke one of the functions
 ###
-### U. Braunschweig, 2016-2024
+### U. Braunschweig, 2016-2025
 
 runGprofiler <- function(
     fore, back = NULL, species, 
@@ -25,6 +26,7 @@ runGprofiler <- function(
 ### and optional custom background.
 ### 
 ### fore:           Vector of ENSEMBL gene IDs (in which to look for enriched categories)
+###                 or list of such vectors, in case of multi-query
 ### back:           (Optional) custum background
 ### species:        Species identifier, e.g. 'mmusculus', 'hsapiens'
 ### sources:        Annotation sources [default: GO, KEGG]
@@ -39,8 +41,10 @@ runGprofiler <- function(
 ###        $meta: metadata
 ### Optionally, a CSV file with enriched categories and an R archive
 ###        with metadata are saved
-print(sources)
+
     libMissing <- !require("gprofiler2", quietly=T) && stop("Failed to load R package 'gprofiler2'")
+
+    multi <- is.list(fore)
 
     go <- gost(
         fore,
@@ -51,7 +55,7 @@ print(sources)
         measure_underrepresentation = measure_underrepresentation,
         user_threshold = user_threshold,
         ordered_query  = ordered,
-        multi_query    = FALSE,
+        multi_query    = multi,
         sources        = sources,
         highlight      = !ordered
     )
@@ -63,38 +67,76 @@ print(sources)
         )
         return(NULL)
     }
-    go.log2Enr     <- log2(
-        (go$result$intersection_size / go$result$query_size) / (go$result$term_size / go$result$effective_domain_size)
-    )
 
-    res <- data.frame(
-        go$result,
-        log2Enr = go.log2Enr
-    )
+    if (multi) {
+        go$parsed <- list(
+            term_id               = go$result$term_id,
+            p_value               = do.call("rbind", go$result$p_values),
+            significant           = do.call("rbind", go$result$significant),
+            term_size             = go$result$term_size,
+            query_size            = do.call("rbind", go$result$query_sizes),
+            intersection_size     = do.call("rbind", go$result$intersection_sizes),
+            source                = go$result$source,
+            term_name             = go$result$term_name,
+            effective_domain_size = go$result$effective_domain_size,
+            source_order          = go$result$source_order,
+            parents               = go$result$parents,
+            highlighted           = do.call("rbind", go$result$highlighted)
+        )
+        
+        go.log2Enr <- log2(
+            (go$parsed$intersection_size / go$parsed$query_size) / (go$parsed$term_size / go$parsed$effective_domain_size)
+        )
+        res <- data.frame(
+            go$result
+        )
+        res$log2Enr = lapply(1:nrow(go.log2Enr), function(x) {go.log2Enr[x,]})
+        
+        if (ordered) {
+            res <- res[c(1, 12, 2:11)]
+        } else {
+            res <- res[c(1, 13, 2:12)]
+        }
 
-    res <- res[order(res$significant, res$log2Enr, res$intersection_size, decreasing = TRUE),]
-    res$parents <- sapply(res$parents, paste, collapse=", ")
-    if (ordered) {
-        res <- res[c(1, 15, 2:14)]
+        go$parsed$log2Enr <- go.log2Enr
+        out <- go$parsed
+
     } else {
-        res <- res[,c(1, 16, 2:15)]
+        go.log2Enr <- go.log2Enr.out <- log2(
+            (go$result$intersection_size / go$result$query_size) / (go$result$term_size / go$result$effective_domain_size)
+        )
+
+        res <- data.frame(
+            go$result,
+            log2Enr = go.log2Enr
+        )
+        res <- res[order(res$significant, res$log2Enr, res$intersection_size, decreasing = TRUE),]
+        res$parents <- sapply(res$parents, paste, collapse=", ")
+        if (ordered) {
+            res <- res[c(1, 15, 2:14)]
+        } else {
+            res <- res[,c(1, 16, 2:15)]
+        }
+        out <- res
     }
+
+    go$meta$multiquery <- multi
 
     if (!is.na(outBase)) {
         write.csv(
             res, row.names = FALSE,
             file = paste0(outBase, "_results.csv")
         )
-        tmp <- go$meta
+        
+        
         save(
-            tmp,
+            go$meta,
             file = paste0(outBase, "_metadata.Rdata")
         )
     }
-    ### This does not allow multi-queries, in which case the structure is different
 
     list(
-        result = res,
+        result = out,
         meta   = go$meta
     )
 }
@@ -134,6 +176,7 @@ plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
 ### maxPcol:          Color to display v-values lower than the higher threshold; ingored if simplePcolor=FALSE.
 ### circleScale:      Scale all circles by this factor (1=100%). Useful because circle size depends on x axis.
 ### legend:           Plot a legend?
+### sourceCol:        Colour scheme for annotation sources
 ### sourceLegendPos:  Position of the sources legend [default: bottomleft]
 ### minXlim:          Minimum coordintes on x-axis. Change if text is cut off. If legend is requested, will me made at
 ###                   least 2 more than the largest LOD.
@@ -145,6 +188,9 @@ plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
 
     if (simplePcol & is.na(maxPcol)) {stop("maxPcol must be provided if simplePcol is TRUE")}
     if (!simplePcol & !is.na(maxPcol)) {warning("maxPcol is ignored if simplePcol is FALSE")}
+    if (!is.data.frame(over) || any(apply(over, MAR = 2, is.list))) {
+        stop("Input 'over' must be a data.frame with 'log2Enr' column. For multi-query results, use plotGprofilerMulti()")
+    }
 
     ## If no underrepresentation table, add dummy
     if (is.null(under)) {
@@ -300,6 +346,133 @@ plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
     par(oldpar)
     if (!is.na(outName)) dev.off()
 }
+
+
+plotGprofilerMulti <- function(x, outName=NA, main="log2 (fold enrichment)",
+                               minLog2Enr=log2(3), maxX=1000, minInt=2, maxCat=NA, 
+                               orderByColumn=NA, queryNames=NA,
+                               onlyHighlighted=FALSE, 
+                               markSignif=FALSE,
+                               sourceCol = c(
+                                    GO="black", KEGG="cadetblue4", REAC="bisque4", TF="coral4", CORUM="darkorchid4",
+                                    HPA="goldenrod4", MIRNA="darkolivegreen", HP="deepskyblue3", HPA="khaki3", WP="salmon3"
+                               ),
+                               legend=TRUE, sourceLegendPos="bottomleft",
+                               ...
+                               ) {
+### Plot the log2-fold enrichment and category names from a multi-query g:Profiler/g:GOSt analysis,
+### as a heatmap using pheatmap.
+###
+### x:                Output from runGprofiler() with multiquery=TRUE
+### outName:          (Optional) Name of plot file (will save a pdf)
+### main:             Figure main header
+### queryNames:       Names of the queries (optional)
+### minLog2Enr:       Minimum |log2(enrichment)| to report categories [default: log2(3)]
+### maxX:             Maximum total number of genes associated with a term in the whole gene space for it to be reported
+###                   (to remove too broad categories)
+### minInt:           Minimum intersection size to report categories
+### maxCat:           Report up to this number of categories
+###                   [default:all categories]
+### orderByColumn:    Order categories by the max log2Enr across these queries. If NA, all queries.
+### onlyHighlighted:  Plot only driver terms 'highlighted' by g:GOSt in at least one query [default: FALSE]
+### markSignif:       Mark categories with p-value < 0.05 with an asterisk
+### sourceCol:        Colour scheme for annotation sources
+### legend:           Plot a legend?
+### sourceLegendPos:  Position of the sources legend [default: bottomleft]
+### ...:              Additional arguments passed to pheatmap()
+
+    libMissing <- !require("pheatmap", quietly=T) && stop("Failed to load R package 'pheatmap'")
+
+    if (length(queryNames) == 1 && is.na(queryNames)) {
+        queryNames <- rep("", ncol(x$result$log2Enr))
+    } else {
+        if (length(queryNames) != ncol(x$result$log2Enr)) {
+            stop("Length of queryNames must match number of queries")
+        }
+    }
+
+    dat <- x$result
+    dat$log2Enr[dat$intersection_size < minInt] <- NA
+    dat$log2Enr[dat$log2Enr < 0] <- 0
+
+
+    sel <- apply(dat$log2Enr, MAR=1, max, na.rm=T) >= minLog2Enr &
+           apply(dat$intersection_size, MAR=1, max, na.rm=T) >= minInt &
+           dat$term_size <= maxX
+
+    if (onlyHighlighted) {sel <- sel & rowSums(dat$highlighted) > 0}
+
+    if (any(is.na(orderByColumn))) {
+        orderByColumn <- 1:ncol(dat$log2Enr)
+    } else {
+        if (max(unlist(orderByColumn)) > ncol(dat$log2Enr)) {
+            stop("orderByColumn out of range")
+        }
+    }
+
+    ## To sort the queries by enrichment, construct a potentially nested sort
+    if (length(orderByColumn[[1]]) > 1) {
+        sortTerm <- paste0("-apply(dat$log2Enr[,c(", paste(orderByColumn[[1]], collapse = ","), ")], MAR=1, max, na.rm=T)")
+    } else {
+        sortTerm <- paste0("-dat$log2Enr[,", orderByColumn[[1]], "]")
+    }
+    if (is.list(orderByColumn) && length(orderByColumn) > 1) {
+        for (i in 2:length(orderByColumn)) {
+            if (length(orderByColumn[[i]]) > 1 ) {
+                sortTerm <- paste0(sortTerm, ", -apply(dat$log2Enr[,c(", paste(orderByColumn[[i]], collapse = ","), ")], MAR=1, max, na.rm=T)")
+            } else {
+                sortTerm <- paste0(sortTerm, ", -dat$log2Enr[,", orderByColumn[[i]], "]")
+            }
+        }
+    }
+    sortTerm <- paste0("order(", sortTerm, ")")
+    ord <- suppressWarnings(eval(parse(text = sortTerm)))
+  
+  #  ord <- suppressWarnings(order(-apply(dat$log2Enr[,orderByColumn], MAR=1, max, na.rm=T)))
+    sel <- ord[sel[ord]]
+
+    enr  <- dat$log2Enr[sel,]
+    pval <- dat$p_value[sel,]
+    if (markSignif) {
+        signif <- ifelse(pval < 0.05, "*", "")
+    } else {
+        signif <- FALSE
+    }
+
+    uqNames <- .properlyUppercase(dat$term_name[sel])
+    uqNames[duplicated(uqNames)] <- paste0(uqNames[duplicated(uqNames)], ".a") 
+    dimnames(enr) <- dimnames(pval) <- list(uqNames, queryNames)         
+
+    anno.rows <- data.frame(row.names           = rownames(enr), check.names=F, stringsAsFactors=F,
+                            "Source"            = dat$source[sel],
+                            "Term size (log10)" = log10(dat$term_size[sel])
+                            )
+    anno.rows$Source[grep("^GO:", anno.rows$Source)] <- "GO"
+    anno.rows$Source[grep("REAC", anno.rows$Source)] <- "REACTOME"
+
+    anno.colors <- list("Source"            = sourceCol,
+                        "Term size (log10)" = c("grey90","grey10")
+                        )
+
+    mybreaks <- c(0, 0.5,1,2,3,4,5)
+    cols <- c(colorRampPalette(c("white","#FDDB27"))(3),
+            colorRampPalette(c("#FDDB27","red"))(4)[-1]
+            )
+
+    ## Plot using pheatmap
+    pheatmap(enr, cluster_rows=FALSE, cluster_cols=FALSE,,
+            breaks=mybreaks, color=cols,
+            display_numbers = signif,
+            angle_col=90,
+            main = main,
+            annotation_row=anno.rows, annotation_colors=anno.colors,
+            ...
+            )
+
+}
+
+
+
 
 
 plotFuncAssDots <- function(file, outName=NA, main="", minLOD=log10(3), maxX=1000, maxCat=NA,
