@@ -1,9 +1,19 @@
 # GOplotTools
 ## Tools to conduct functional enrichment analysis, parse and plot output from gene ontology (GO) analysis (web) tools
 
+### User functions
+- **runGprofiler():**          Run GO analysis locally with the g:GOSt function of g:Profiler
+- **plotGprofilerDots():**     Generate lollipop plot of results obtained with _runGprofiler()_
+                           or from web interface. If the latter, manually add column 'log2Enr' with log2 (enrichment).
+- **plotGprofilerMulti()**:    Generate heatmap of results obtained with multi-query _runGprofiler()_
+- **plotFuncAssDots():**       Generate lollipop plot of results obtained with FuncAssociate
+- **plotFuncAssCategories():** Plot FuncAssociate enrichment scores as bar graph
+- **plotDAVIDclusters():**     Plot DAVID cluster scores as bar graph
+
 ### Dependencies
 - Any version of R
 - CRAN packags _gprofiler2_ (for local g:Profiler analysis), _plotrix_ and optionally _parallel_
+- CRAN package _pheatmap_ for _plotGprofilerDots()_
 
 ### Workflow to conduct and plot GO analysis using g:Profiler or FuncAssociate
 

@@ -80,9 +80,11 @@ runGprofiler <- function(
             term_name             = go$result$term_name,
             effective_domain_size = go$result$effective_domain_size,
             source_order          = go$result$source_order,
-            parents               = go$result$parents,
-            highlighted           = do.call("rbind", go$result$highlighted)
+            parents               = go$result$parents
         )
+        if (!ordered) {
+            go$parsed$highlighted = do.call("rbind", go$result$highlighted)
+        }
         
         go.log2Enr <- log2(
             (go$parsed$intersection_size / go$parsed$query_size) / (go$parsed$term_size / go$parsed$effective_domain_size)
@@ -348,16 +350,17 @@ plotGprofilerDots <- function(over, under=NULL, outName=NA, main="",
 }
 
 
-plotGprofilerMulti <- function(x, outName=NA, main="log2 (fold enrichment)",
+plotGprofilerMulti <- function(x, outName=NA, 
+                               main="log2 (fold enrichment)",  queryNames=NA,
                                minLog2Enr=log2(3), maxX=1000, minInt=2, maxCat=NA, 
-                               orderByColumn=NA, queryNames=NA,
+                               orderByColumn=NA, orderFun = "max",
                                onlyHighlighted=FALSE, 
                                markSignif=FALSE,
+                               dropSources=TRUE,
                                sourceCol = c(
                                     GO="black", KEGG="cadetblue4", REAC="bisque4", TF="coral4", CORUM="darkorchid4",
                                     HPA="goldenrod4", MIRNA="darkolivegreen", HP="deepskyblue3", HPA="khaki3", WP="salmon3"
                                ),
-                               legend=TRUE, sourceLegendPos="bottomleft",
                                ...
                                ) {
 ### Plot the log2-fold enrichment and category names from a multi-query g:Profiler/g:GOSt analysis,
@@ -374,11 +377,12 @@ plotGprofilerMulti <- function(x, outName=NA, main="log2 (fold enrichment)",
 ### maxCat:           Report up to this number of categories
 ###                   [default:all categories]
 ### orderByColumn:    Order categories by the max log2Enr across these queries. If NA, all queries.
+### orderFun:         If orderByColumn contains multiple columns (either as a vector, or as a slot of a list),
+###                   function with which to aggregate the log2FC values [default: max].
 ### onlyHighlighted:  Plot only driver terms 'highlighted' by g:GOSt in at least one query [default: FALSE]
 ### markSignif:       Mark categories with p-value < 0.05 with an asterisk
+### dropSources:      Drop source annotation from legend if not present in results
 ### sourceCol:        Colour scheme for annotation sources
-### legend:           Plot a legend?
-### sourceLegendPos:  Position of the sources legend [default: bottomleft]
 ### ...:              Additional arguments passed to pheatmap()
 
     libMissing <- !require("pheatmap", quietly=T) && stop("Failed to load R package 'pheatmap'")
@@ -412,36 +416,46 @@ plotGprofilerMulti <- function(x, outName=NA, main="log2 (fold enrichment)",
 
     ## To sort the queries by enrichment, construct a potentially nested sort
     if (length(orderByColumn[[1]]) > 1) {
-        sortTerm <- paste0("-apply(dat$log2Enr[,c(", paste(orderByColumn[[1]], collapse = ","), ")], MAR=1, max, na.rm=T)")
+        sortTerm <- paste0(
+            "-apply(dat$log2Enr[,c(", paste(orderByColumn[[1]], collapse = ","),
+             ")], MAR=1, ", orderFun, 
+             ", na.rm=T)"
+        )
     } else {
         sortTerm <- paste0("-dat$log2Enr[,", orderByColumn[[1]], "]")
     }
     if (is.list(orderByColumn) && length(orderByColumn) > 1) {
         for (i in 2:length(orderByColumn)) {
             if (length(orderByColumn[[i]]) > 1 ) {
-                sortTerm <- paste0(sortTerm, ", -apply(dat$log2Enr[,c(", paste(orderByColumn[[i]], collapse = ","), ")], MAR=1, max, na.rm=T)")
+                sortTerm <- paste0(
+                    sortTerm, ", -apply(dat$log2Enr[,c(", 
+                    paste(orderByColumn[[i]], collapse = ","), 
+                    ")], MAR=1, ", orderFun, 
+                    ", na.rm=T)"
+                )
             } else {
-                sortTerm <- paste0(sortTerm, ", -dat$log2Enr[,", orderByColumn[[i]], "]")
+                sortTerm <- paste0(
+                    sortTerm, ", -dat$log2Enr[,", 
+                    orderByColumn[[i]], "]"
+                )
             }
         }
     }
     sortTerm <- paste0("order(", sortTerm, ")")
     ord <- suppressWarnings(eval(parse(text = sortTerm)))
-  
-  #  ord <- suppressWarnings(order(-apply(dat$log2Enr[,orderByColumn], MAR=1, max, na.rm=T)))
     sel <- ord[sel[ord]]
 
     enr  <- dat$log2Enr[sel,]
-    pval <- dat$p_value[sel,]
+    signif <- dat$significant[sel,]
     if (markSignif) {
-        signif <- ifelse(pval < 0.05, "*", "")
+        signif <- ifelse(signif, "*", "")
     } else {
         signif <- FALSE
     }
 
     uqNames <- .properlyUppercase(dat$term_name[sel])
     uqNames[duplicated(uqNames)] <- paste0(uqNames[duplicated(uqNames)], ".a") 
-    dimnames(enr) <- dimnames(pval) <- list(uqNames, queryNames)         
+    dimnames(enr) <- list(uqNames, queryNames)         
 
     anno.rows <- data.frame(row.names           = rownames(enr), check.names=F, stringsAsFactors=F,
                             "Source"            = dat$source[sel],
@@ -450,6 +464,7 @@ plotGprofilerMulti <- function(x, outName=NA, main="log2 (fold enrichment)",
     anno.rows$Source[grep("^GO:", anno.rows$Source)] <- "GO"
     anno.rows$Source[grep("REAC", anno.rows$Source)] <- "REACTOME"
 
+    if (dropSources) {sourceCol <- sourceCol[which(names(sourceCol) %in% anno.rows$Source)]}
     anno.colors <- list("Source"            = sourceCol,
                         "Term size (log10)" = c("grey90","grey10")
                         )
